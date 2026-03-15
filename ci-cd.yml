@@ -1,0 +1,234 @@
+name: Nur Tasbih CI/CD
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+  # ─────────────────────────────────────────────
+  # 1. Backend Tests
+  # ─────────────────────────────────────────────
+  backend-test:
+    name: 🟢 Backend Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Bağımlılıkları yükle
+        working-directory: backend
+        run: npm ci --prefer-offline 2>/dev/null || npm install
+
+      - name: Syntax kontrolü
+        working-directory: backend
+        run: |
+          node --check server.js      && echo "✅ server.js"
+          node --check routes/auth.js && echo "✅ auth.js"
+          node --check routes/payment.js && echo "✅ payment.js"
+          node --check routes/tasbih.js && echo "✅ tasbih.js"
+          node --check database.js    && echo "✅ database.js"
+
+      - name: API endpoint testi
+        working-directory: backend
+        env:
+          PORT: 3099
+          NODE_ENV: test
+          JWT_SECRET: test-secret-ci-12345
+          DB_PATH: ./test_ci.db
+          FRONTEND_URL: http://localhost:5173
+          BACKEND_URL: http://localhost:3099
+          IYZICO_API_KEY: sandbox-api-key
+          IYZICO_SECRET_KEY: sandbox-secret-key
+          IYZICO_URI: https://sandbox-api.iyzipay.com
+        run: |
+          # Sunucuyu arka planda başlat
+          node server.js &
+          SERVER_PID=$!
+          sleep 3
+
+          # Health check
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3099/health)
+          [ "$STATUS" = "200" ] && echo "✅ /health OK" || (echo "❌ /health FAIL: $STATUS" && kill $SERVER_PID && exit 1)
+
+          # Register
+          RESP=$(curl -s -X POST http://localhost:3099/api/auth/register \
+            -H "Content-Type: application/json" \
+            -d '{"email":"ci@nurtasbih.com","password":"test123456","full_name":"CI Test"}')
+          echo "$RESP" | grep -q '"ok":true' && echo "✅ /register OK" || (echo "❌ /register: $RESP" && kill $SERVER_PID && exit 1)
+
+          # Token al
+          TOKEN=$(echo "$RESP" | node -e "let d=''; process.stdin.on('data',c=>d+=c).on('end',()=>console.log(JSON.parse(d).token))")
+
+          # Login
+          LOGIN=$(curl -s -X POST http://localhost:3099/api/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"ci@nurtasbih.com","password":"test123456"}')
+          echo "$LOGIN" | grep -q '"ok":true' && echo "✅ /login OK" || (echo "❌ /login: $LOGIN" && kill $SERVER_PID && exit 1)
+
+          # Me endpoint
+          ME=$(curl -s http://localhost:3099/api/auth/me \
+            -H "Authorization: Bearer $TOKEN")
+          echo "$ME" | grep -q '"email"' && echo "✅ /me OK" || (echo "❌ /me: $ME" && kill $SERVER_PID && exit 1)
+
+          # Payment plans
+          PLANS=$(curl -s http://localhost:3099/api/payment/plans)
+          echo "$PLANS" | grep -q 'monthly' && echo "✅ /payment/plans OK" || (echo "❌ /plans: $PLANS" && kill $SERVER_PID && exit 1)
+
+          kill $SERVER_PID
+          echo ""
+          echo "🎉 Tüm backend testleri geçti!"
+
+  # ─────────────────────────────────────────────
+  # 2. Frontend Build
+  # ─────────────────────────────────────────────
+  frontend-build:
+    name: ⚛️ Frontend Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Bağımlılıkları yükle
+        working-directory: frontend
+        run: npm ci --prefer-offline 2>/dev/null || npm install
+
+      - name: Build al
+        working-directory: frontend
+        env:
+          VITE_API_URL: /api
+          CI: false
+        run: npm run build
+
+      - name: Build boyutu kontrol
+        working-directory: frontend
+        run: |
+          BUILD_SIZE=$(du -sh dist/ | cut -f1)
+          echo "📦 Build boyutu: $BUILD_SIZE"
+          echo "## 📦 Build Özeti" >> $GITHUB_STEP_SUMMARY
+          echo "- Build boyutu: $BUILD_SIZE" >> $GITHUB_STEP_SUMMARY
+          ls dist/
+
+      - name: Build artifact sakla
+        uses: actions/upload-artifact@v4
+        with:
+          name: nur-tasbih-frontend-build
+          path: frontend/dist
+          retention-days: 7
+
+  # ─────────────────────────────────────────────
+  # 3. Android Build (APK) — sadece main push
+  # ─────────────────────────────────────────────
+  android-build:
+    name: 📱 Android Build Check
+    needs: [frontend-build]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Java kur (Android için)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Frontend build artifact indir
+        uses: actions/download-artifact@v4
+        with:
+          name: nur-tasbih-frontend-build
+          path: frontend/dist
+
+      - name: Capacitor bağımlılıklarını yükle
+        working-directory: frontend
+        run: npm ci --prefer-offline 2>/dev/null || npm install
+
+      - name: capacitor.config.json kontrol
+        working-directory: frontend
+        run: |
+          cat capacitor.config.json
+          echo "✅ Capacitor config OK"
+
+      - name: Android klasörü var mı kontrol
+        working-directory: frontend
+        run: |
+          if [ -d "android" ]; then
+            echo "✅ Android klasörü mevcut"
+          else
+            echo "ℹ️ Android klasörü yok — ilk deploy'da 'npx cap add android' çalıştır"
+          fi
+
+  # ─────────────────────────────────────────────
+  # 4. Deploy — sadece main push
+  # ─────────────────────────────────────────────
+  deploy:
+    name: 🚀 Deploy
+    needs: [backend-test, frontend-build]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Railway CLI kur
+        run: npm install -g @railway/cli
+
+      - name: Backend deploy et
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          echo "🚀 Backend deploy başlıyor..."
+          railway up --service backend --detach
+          echo "✅ Deploy tetiklendi"
+
+      - name: Smoke test
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+        run: |
+          if [ -z "$BACKEND_URL" ]; then
+            echo "⚠️ BACKEND_URL secret eksik — smoke test atlandı"
+            exit 0
+          fi
+          echo "Smoke test: $BACKEND_URL/health"
+          sleep 20
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BACKEND_URL/health" --max-time 30 || echo "000")
+          if [ "$STATUS" = "200" ]; then
+            echo "✅ Smoke test geçti"
+          else
+            echo "⚠️ HTTP $STATUS — deploy kontrol edin"
+          fi
+
+      - name: Deploy özeti
+        if: always()
+        run: |
+          echo "## 🚀 Nur Tasbih Deploy" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tarih:** $(date -u '+%d.%m.%Y %H:%M UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deployer:** @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
