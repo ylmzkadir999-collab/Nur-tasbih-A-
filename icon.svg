@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#0d0d2b"/>
+      <stop offset="100%" stop-color="#06060f"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="50%" cy="40%" r="55%">
+      <stop offset="0%" stop-color="#f5b800" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#f5b800" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Arka plan -->
+  <rect width="512" height="512" rx="110" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="110" fill="url(#glow)"/>
+
+  <!-- Dış daire halkası -->
+  <circle cx="256" cy="256" r="200" fill="none" stroke="#f5b800" stroke-width="2.5" stroke-opacity="0.25"/>
+  <circle cx="256" cy="256" r="185" fill="none" stroke="#f5b800" stroke-width="1" stroke-opacity="0.12"/>
+
+  <!-- Tesbih taneleri (daire üzerinde 11 tane) -->
+  <g>
+    <circle cx="256" cy="68" r="11" fill="#f5b800" opacity="0.9"/>
+    <circle cx="351" cy="96" r="10" fill="#f5b800" opacity="0.75"/>
+    <circle cx="421" cy="165" r="10" fill="#f5b800" opacity="0.65"/>
+    <circle cx="444" cy="256" r="10" fill="#f5b800" opacity="0.6"/>
+    <circle cx="421" cy="347" r="10" fill="#f5b800" opacity="0.55"/>
+    <circle cx="351" cy="416" r="10" fill="#f5b800" opacity="0.5"/>
+    <circle cx="256" cy="444" r="10" fill="#f5b800" opacity="0.45"/>
+    <circle cx="161" cy="416" r="10" fill="#f5b800" opacity="0.5"/>
+    <circle cx="91"  cy="347" r="10" fill="#f5b800" opacity="0.55"/>
+    <circle cx="68"  cy="256" r="10" fill="#f5b800" opacity="0.6"/>
+    <circle cx="91"  cy="165" r="10" fill="#f5b800" opacity="0.65"/>
+    <circle cx="161" cy="96"  r="10" fill="#f5b800" opacity="0.75"/>
+  </g>
+
+  <!-- Merkez hilal -->
+  <g transform="translate(256,248)">
+    <!-- Dış ay -->
+    <circle cx="0" cy="0" r="72" fill="#f5b800" opacity="0.15"/>
+    <circle cx="0" cy="0" r="60" fill="#f5b800" opacity="0.08"/>
+
+    <!-- Hilal -->
+    <path d="M -8 -48 
+             C 20 -44, 48 -20, 48 8
+             C 48 36, 28 58, 0 62
+             C -8 63, -16 62, -24 58
+             C -4 52, 12 36, 16 16
+             C 20 -4, 12 -26, -8 -40 Z"
+          fill="#f5b800" opacity="0.95"/>
+
+    <!-- Yıldız -->
+    <g transform="translate(28, -28) scale(0.7)">
+      <polygon points="0,-18 4,-6 17,-6 7,3 11,15 0,7 -11,15 -7,3 -17,-6 -4,-6"
+               fill="#f5b800" opacity="0.9"/>
+    </g>
+  </g>
+
+  <!-- Üst küçük taşlar (baş tanesi) -->
+  <circle cx="256" cy="56" r="6" fill="#f5b800" opacity="1"/>
+  <rect x="253" y="34" width="6" height="20" rx="3" fill="#f5b800" opacity="0.7"/>
+  <circle cx="256" cy="30" r="8" fill="#f5b800" opacity="0.85"/>
+</svg>
